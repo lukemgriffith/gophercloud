@@ -3,294 +3,301 @@
 package lbaas_v2
 
 import (
-	"testing"
+        "testing"
 
-	"github.com/gophercloud/gophercloud/acceptance/clients"
-	networking "github.com/gophercloud/gophercloud/acceptance/openstack/networking/v2"
-	"github.com/gophercloud/gophercloud/acceptance/tools"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/l7policies"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/listeners"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/loadbalancers"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/monitors"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/pools"
-	th "github.com/gophercloud/gophercloud/testhelper"
+        "github.com/gophercloud/gophercloud/acceptance/clients"
+        networking "github.com/gophercloud/gophercloud/acceptance/openstack/networking/v2"
+        "github.com/gophercloud/gophercloud/acceptance/tools"
+        "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/l7policies"
+        "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/listeners"
+        "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/loadbalancers"
+        "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/monitors"
+        "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/pools"
+        th "github.com/gophercloud/gophercloud/testhelper"
 )
 
 func TestLoadbalancersList(t *testing.T) {
-	client, err := clients.NewNetworkV2Client()
-	th.AssertNoErr(t, err)
+        client, err := clients.NewNetworkV2Client()
+        th.AssertNoErr(t, err)
 
-	allPages, err := loadbalancers.List(client, nil).AllPages()
-	th.AssertNoErr(t, err)
+        allPages, err := loadbalancers.List(client, nil).AllPages()
+        th.AssertNoErr(t, err)
 
-	allLoadbalancers, err := loadbalancers.ExtractLoadBalancers(allPages)
-	th.AssertNoErr(t, err)
+        allLoadbalancers, err := loadbalancers.ExtractLoadBalancers(allPages)
+        th.AssertNoErr(t, err)
 
-	for _, lb := range allLoadbalancers {
-		tools.PrintResource(t, lb)
-	}
+        for _, lb := range allLoadbalancers {
+                tools.PrintResource(t, lb)
+        }
 }
 
 func TestLoadbalancersCRUD(t *testing.T) {
-	client, err := clients.NewNetworkV2Client()
-	th.AssertNoErr(t, err)
+        client, err := clients.NewNetworkV2Client()
+        th.AssertNoErr(t, err)
 
-	network, err := networking.CreateNetwork(t, client)
-	th.AssertNoErr(t, err)
-	defer networking.DeleteNetwork(t, client, network.ID)
+        network, err := networking.CreateNetwork(t, client)
+        th.AssertNoErr(t, err)
+        defer networking.DeleteNetwork(t, client, network.ID)
 
-	subnet, err := networking.CreateSubnet(t, client, network.ID)
-	th.AssertNoErr(t, err)
-	defer networking.DeleteSubnet(t, client, subnet.ID)
+        subnet, err := networking.CreateSubnet(t, client, network.ID)
+        th.AssertNoErr(t, err)
+        defer networking.DeleteSubnet(t, client, subnet.ID)
 
-	lb, err := CreateLoadBalancer(t, client, subnet.ID)
-	th.AssertNoErr(t, err)
-	defer DeleteLoadBalancer(t, client, lb.ID)
+        lb, err := CreateLoadBalancerWithSubnetId(t, client, subnet.ID)
+        th.AssertNoErr(t, err)
+        defer DeleteLoadBalancer(t, client, lb.ID)
 
-	lbDescription := ""
-	updateLoadBalancerOpts := loadbalancers.UpdateOpts{
-		Description: &lbDescription,
-	}
-	_, err = loadbalancers.Update(client, lb.ID, updateLoadBalancerOpts).Extract()
-	th.AssertNoErr(t, err)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
-		t.Fatalf("Timed out waiting for loadbalancer to become active")
-	}
+        lb1, err := CreateLoadBalancerWithNetworkId(t, client, network.ID)
+        th.AssertNoErr(t, err)
+        defer DeleteLoadBalancer(t, client, lb1.ID)
 
-	newLB, err := loadbalancers.Get(client, lb.ID).Extract()
-	th.AssertNoErr(t, err)
 
-	tools.PrintResource(t, newLB)
 
-	th.AssertEquals(t, newLB.Description, lbDescription)
+        lbDescription := ""
+        updateLoadBalancerOpts := loadbalancers.UpdateOpts{
+                Description: &lbDescription,
+        }
+        _, err = loadbalancers.Update(client, lb.ID, updateLoadBalancerOpts).Extract()
+        th.AssertNoErr(t, err)
 
-	lbStats, err := loadbalancers.GetStats(client, lb.ID).Extract()
-	th.AssertNoErr(t, err)
+        if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+                t.Fatalf("Timed out waiting for loadbalancer to become active")
+        }
 
-	tools.PrintResource(t, lbStats)
+        newLB, err := loadbalancers.Get(client, lb.ID).Extract()
+        th.AssertNoErr(t, err)
 
-	// Because of the time it takes to create a loadbalancer,
-	// this test will include some other resources.
+        tools.PrintResource(t, newLB)
 
-	// Listener
-	listener, err := CreateListener(t, client, lb)
-	th.AssertNoErr(t, err)
-	defer DeleteListener(t, client, lb.ID, listener.ID)
+        th.AssertEquals(t, newLB.Description, lbDescription)
 
-	listenerName := ""
-	listenerDescription := ""
-	updateListenerOpts := listeners.UpdateOpts{
-		Name:        &listenerName,
-		Description: &listenerDescription,
-	}
-	_, err = listeners.Update(client, listener.ID, updateListenerOpts).Extract()
-	th.AssertNoErr(t, err)
+        lbStats, err := loadbalancers.GetStats(client, lb.ID).Extract()
+        th.AssertNoErr(t, err)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
-		t.Fatalf("Timed out waiting for loadbalancer to become active")
-	}
+        tools.PrintResource(t, lbStats)
 
-	newListener, err := listeners.Get(client, listener.ID).Extract()
-	th.AssertNoErr(t, err)
+        // Because of the time it takes to create a loadbalancer,
+        // this test will include some other resources.
 
-	tools.PrintResource(t, newListener)
+        // Listener
+        listener, err := CreateListener(t, client, lb)
+        th.AssertNoErr(t, err)
+        defer DeleteListener(t, client, lb.ID, listener.ID)
 
-	th.AssertEquals(t, newListener.Name, listenerName)
-	th.AssertEquals(t, newListener.Description, listenerDescription)
+        listenerName := ""
+        listenerDescription := ""
+        updateListenerOpts := listeners.UpdateOpts{
+                Name:        &listenerName,
+                Description: &listenerDescription,
+        }
+        _, err = listeners.Update(client, listener.ID, updateListenerOpts).Extract()
+        th.AssertNoErr(t, err)
 
-	// L7 policy
-	policy, err := CreateL7Policy(t, client, listener, lb)
-	th.AssertNoErr(t, err)
-	defer DeleteL7Policy(t, client, lb.ID, policy.ID)
+        if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+                t.Fatalf("Timed out waiting for loadbalancer to become active")
+        }
 
-	newDescription := ""
-	updateL7policyOpts := l7policies.UpdateOpts{
-		Description: &newDescription,
-	}
-	_, err = l7policies.Update(client, policy.ID, updateL7policyOpts).Extract()
-	th.AssertNoErr(t, err)
+        newListener, err := listeners.Get(client, listener.ID).Extract()
+        th.AssertNoErr(t, err)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
-		t.Fatalf("Timed out waiting for loadbalancer to become active")
-	}
+        tools.PrintResource(t, newListener)
 
-	newPolicy, err := l7policies.Get(client, policy.ID).Extract()
-	th.AssertNoErr(t, err)
+        th.AssertEquals(t, newListener.Name, listenerName)
+        th.AssertEquals(t, newListener.Description, listenerDescription)
 
-	tools.PrintResource(t, newPolicy)
+        // L7 policy
+        policy, err := CreateL7Policy(t, client, listener, lb)
+        th.AssertNoErr(t, err)
+        defer DeleteL7Policy(t, client, lb.ID, policy.ID)
 
-	th.AssertEquals(t, newPolicy.Description, newDescription)
+        newDescription := ""
+        updateL7policyOpts := l7policies.UpdateOpts{
+                Description: &newDescription,
+        }
+        _, err = l7policies.Update(client, policy.ID, updateL7policyOpts).Extract()
+        th.AssertNoErr(t, err)
 
-	// L7 rule
-	rule, err := CreateL7Rule(t, client, newPolicy.ID, lb)
-	th.AssertNoErr(t, err)
-	defer DeleteL7Rule(t, client, lb.ID, policy.ID, rule.ID)
+        if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+                t.Fatalf("Timed out waiting for loadbalancer to become active")
+        }
 
-	allPages, err := l7policies.ListRules(client, policy.ID, l7policies.ListRulesOpts{}).AllPages()
-	th.AssertNoErr(t, err)
-	allRules, err := l7policies.ExtractRules(allPages)
-	th.AssertNoErr(t, err)
-	for _, rule := range allRules {
-		tools.PrintResource(t, rule)
-	}
+        newPolicy, err := l7policies.Get(client, policy.ID).Extract()
+        th.AssertNoErr(t, err)
 
-	/* NOT supported on F5 driver */
-	updateL7ruleOpts := l7policies.UpdateRuleOpts{
-		RuleType:    l7policies.TypePath,
-		CompareType: l7policies.CompareTypeRegex,
-		Value:       "/images/special*",
-	}
-	_, err = l7policies.UpdateRule(client, policy.ID, rule.ID, updateL7ruleOpts).Extract()
-	th.AssertNoErr(t, err)
+        tools.PrintResource(t, newPolicy)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
-		t.Fatalf("Timed out waiting for loadbalancer to become active")
-	}
+        th.AssertEquals(t, newPolicy.Description, newDescription)
 
-	newRule, err := l7policies.GetRule(client, newPolicy.ID, rule.ID).Extract()
-	th.AssertNoErr(t, err)
+        // L7 rule
+        rule, err := CreateL7Rule(t, client, newPolicy.ID, lb)
+        th.AssertNoErr(t, err)
+        defer DeleteL7Rule(t, client, lb.ID, policy.ID, rule.ID)
 
-	tools.PrintResource(t, newRule)
+        allPages, err := l7policies.ListRules(client, policy.ID, l7policies.ListRulesOpts{}).AllPages()
+        th.AssertNoErr(t, err)
+        allRules, err := l7policies.ExtractRules(allPages)
+        th.AssertNoErr(t, err)
+        for _, rule := range allRules {
+                tools.PrintResource(t, rule)
+        }
 
-	// Pool
-	pool, err := CreatePool(t, client, lb)
-	th.AssertNoErr(t, err)
-	defer DeletePool(t, client, lb.ID, pool.ID)
+        /* NOT supported on F5 driver */
+        updateL7ruleOpts := l7policies.UpdateRuleOpts{
+                RuleType:    l7policies.TypePath,
+                CompareType: l7policies.CompareTypeRegex,
+                Value:       "/images/special*",
+        }
+        _, err = l7policies.UpdateRule(client, policy.ID, rule.ID, updateL7ruleOpts).Extract()
+        th.AssertNoErr(t, err)
 
-	poolName := ""
-	poolDescription := ""
-	updatePoolOpts := pools.UpdateOpts{
-		Name:        &poolName,
-		Description: &poolDescription,
-	}
-	_, err = pools.Update(client, pool.ID, updatePoolOpts).Extract()
-	th.AssertNoErr(t, err)
+        if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+                t.Fatalf("Timed out waiting for loadbalancer to become active")
+        }
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
-		t.Fatalf("Timed out waiting for loadbalancer to become active")
-	}
+        newRule, err := l7policies.GetRule(client, newPolicy.ID, rule.ID).Extract()
+        th.AssertNoErr(t, err)
 
-	newPool, err := pools.Get(client, pool.ID).Extract()
-	th.AssertNoErr(t, err)
+        tools.PrintResource(t, newRule)
 
-	tools.PrintResource(t, newPool)
-	th.AssertEquals(t, newPool.Name, poolName)
-	th.AssertEquals(t, newPool.Description, poolDescription)
+        // Pool
+        pool, err := CreatePool(t, client, lb)
+        th.AssertNoErr(t, err)
+        defer DeletePool(t, client, lb.ID, pool.ID)
 
-	// Update L7policy to redirect to pool
-	newRedirectURL := ""
-	updateL7policyOpts = l7policies.UpdateOpts{
-		Action:         l7policies.ActionRedirectToPool,
-		RedirectPoolID: &newPool.ID,
-		RedirectURL:    &newRedirectURL,
-	}
-	_, err = l7policies.Update(client, policy.ID, updateL7policyOpts).Extract()
-	th.AssertNoErr(t, err)
+        poolName := ""
+        poolDescription := ""
+        updatePoolOpts := pools.UpdateOpts{
+                Name:        &poolName,
+                Description: &poolDescription,
+        }
+        _, err = pools.Update(client, pool.ID, updatePoolOpts).Extract()
+        th.AssertNoErr(t, err)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
-		t.Fatalf("Timed out waiting for loadbalancer to become active")
-	}
+        if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+                t.Fatalf("Timed out waiting for loadbalancer to become active")
+        }
 
-	newPolicy, err = l7policies.Get(client, policy.ID).Extract()
-	th.AssertNoErr(t, err)
+        newPool, err := pools.Get(client, pool.ID).Extract()
+        th.AssertNoErr(t, err)
 
-	tools.PrintResource(t, newPolicy)
+        tools.PrintResource(t, newPool)
+        th.AssertEquals(t, newPool.Name, poolName)
+        th.AssertEquals(t, newPool.Description, poolDescription)
 
-	th.AssertEquals(t, newPolicy.Description, newDescription)
-	th.AssertEquals(t, newPolicy.Action, string(l7policies.ActionRedirectToPool))
-	th.AssertEquals(t, newPolicy.RedirectPoolID, newPool.ID)
-	th.AssertEquals(t, newPolicy.RedirectURL, newRedirectURL)
+        // Update L7policy to redirect to pool
+        newRedirectURL := ""
+        updateL7policyOpts = l7policies.UpdateOpts{
+                Action:         l7policies.ActionRedirectToPool,
+                RedirectPoolID: &newPool.ID,
+                RedirectURL:    &newRedirectURL,
+        }
+        _, err = l7policies.Update(client, policy.ID, updateL7policyOpts).Extract()
+        th.AssertNoErr(t, err)
 
-	// Workaround for proper delete order
-	defer DeleteL7Policy(t, client, lb.ID, policy.ID)
-	defer DeleteL7Rule(t, client, lb.ID, policy.ID, rule.ID)
+        if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+                t.Fatalf("Timed out waiting for loadbalancer to become active")
+        }
 
-	// Update listener's default pool ID
-	updateListenerOpts = listeners.UpdateOpts{
-		DefaultPoolID: &pool.ID,
-	}
-	_, err = listeners.Update(client, listener.ID, updateListenerOpts).Extract()
-	th.AssertNoErr(t, err)
+        newPolicy, err = l7policies.Get(client, policy.ID).Extract()
+        th.AssertNoErr(t, err)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
-		t.Fatalf("Timed out waiting for loadbalancer to become active")
-	}
+        tools.PrintResource(t, newPolicy)
 
-	newListener, err = listeners.Get(client, listener.ID).Extract()
-	th.AssertNoErr(t, err)
+        th.AssertEquals(t, newPolicy.Description, newDescription)
+        th.AssertEquals(t, newPolicy.Action, string(l7policies.ActionRedirectToPool))
+        th.AssertEquals(t, newPolicy.RedirectPoolID, newPool.ID)
+        th.AssertEquals(t, newPolicy.RedirectURL, newRedirectURL)
 
-	tools.PrintResource(t, newListener)
+        // Workaround for proper delete order
+        defer DeleteL7Policy(t, client, lb.ID, policy.ID)
+        defer DeleteL7Rule(t, client, lb.ID, policy.ID, rule.ID)
 
-	th.AssertEquals(t, newListener.DefaultPoolID, pool.ID)
+        // Update listener's default pool ID
+        updateListenerOpts = listeners.UpdateOpts{
+                DefaultPoolID: &pool.ID,
+        }
+        _, err = listeners.Update(client, listener.ID, updateListenerOpts).Extract()
+        th.AssertNoErr(t, err)
 
-	// Remove listener's default pool ID
-	emptyPoolID := ""
-	updateListenerOpts = listeners.UpdateOpts{
-		DefaultPoolID: &emptyPoolID,
-	}
-	_, err = listeners.Update(client, listener.ID, updateListenerOpts).Extract()
-	th.AssertNoErr(t, err)
+        if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+                t.Fatalf("Timed out waiting for loadbalancer to become active")
+        }
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
-		t.Fatalf("Timed out waiting for loadbalancer to become active")
-	}
+        newListener, err = listeners.Get(client, listener.ID).Extract()
+        th.AssertNoErr(t, err)
 
-	newListener, err = listeners.Get(client, listener.ID).Extract()
-	th.AssertNoErr(t, err)
+        tools.PrintResource(t, newListener)
 
-	tools.PrintResource(t, newListener)
+        th.AssertEquals(t, newListener.DefaultPoolID, pool.ID)
 
-	th.AssertEquals(t, newListener.DefaultPoolID, "")
+        // Remove listener's default pool ID
+        emptyPoolID := ""
+        updateListenerOpts = listeners.UpdateOpts{
+                DefaultPoolID: &emptyPoolID,
+        }
+        _, err = listeners.Update(client, listener.ID, updateListenerOpts).Extract()
+        th.AssertNoErr(t, err)
 
-	// Member
-	member, err := CreateMember(t, client, lb, newPool, subnet.ID, subnet.CIDR)
-	th.AssertNoErr(t, err)
-	defer DeleteMember(t, client, lb.ID, pool.ID, member.ID)
+        if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+                t.Fatalf("Timed out waiting for loadbalancer to become active")
+        }
 
-	memberName := ""
-	newWeight := tools.RandomInt(11, 100)
-	updateMemberOpts := pools.UpdateMemberOpts{
-		Name:   &memberName,
-		Weight: &newWeight,
-	}
-	_, err = pools.UpdateMember(client, pool.ID, member.ID, updateMemberOpts).Extract()
-	th.AssertNoErr(t, err)
+        newListener, err = listeners.Get(client, listener.ID).Extract()
+        th.AssertNoErr(t, err)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
-		t.Fatalf("Timed out waiting for loadbalancer to become active")
-	}
+        tools.PrintResource(t, newListener)
 
-	newMember, err := pools.GetMember(client, pool.ID, member.ID).Extract()
-	th.AssertNoErr(t, err)
+        th.AssertEquals(t, newListener.DefaultPoolID, "")
 
-	tools.PrintResource(t, newMember)
-	th.AssertEquals(t, newMember.Name, memberName)
-	th.AssertEquals(t, newMember.Weight, newWeight)
+        // Member
+        member, err := CreateMember(t, client, lb, newPool, subnet.ID, subnet.CIDR)
+        th.AssertNoErr(t, err)
+        defer DeleteMember(t, client, lb.ID, pool.ID, member.ID)
 
-	// Monitor
-	monitor, err := CreateMonitor(t, client, lb, newPool)
-	th.AssertNoErr(t, err)
-	defer DeleteMonitor(t, client, lb.ID, monitor.ID)
+        memberName := ""
+        newWeight := tools.RandomInt(11, 100)
+        updateMemberOpts := pools.UpdateMemberOpts{
+                Name:   &memberName,
+                Weight: &newWeight,
+        }
+        _, err = pools.UpdateMember(client, pool.ID, member.ID, updateMemberOpts).Extract()
+        th.AssertNoErr(t, err)
 
-	monName := ""
-	newDelay := tools.RandomInt(20, 30)
-	updateMonitorOpts := monitors.UpdateOpts{
-		Name:  &monName,
-		Delay: newDelay,
-	}
-	_, err = monitors.Update(client, monitor.ID, updateMonitorOpts).Extract()
-	th.AssertNoErr(t, err)
+        if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+                t.Fatalf("Timed out waiting for loadbalancer to become active")
+        }
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
-		t.Fatalf("Timed out waiting for loadbalancer to become active")
-	}
+        newMember, err := pools.GetMember(client, pool.ID, member.ID).Extract()
+        th.AssertNoErr(t, err)
 
-	newMonitor, err := monitors.Get(client, monitor.ID).Extract()
-	th.AssertNoErr(t, err)
+        tools.PrintResource(t, newMember)
+        th.AssertEquals(t, newMember.Name, memberName)
+        th.AssertEquals(t, newMember.Weight, newWeight)
 
-	tools.PrintResource(t, newMonitor)
+        // Monitor
+        monitor, err := CreateMonitor(t, client, lb, newPool)
+        th.AssertNoErr(t, err)
+        defer DeleteMonitor(t, client, lb.ID, monitor.ID)
 
-	th.AssertEquals(t, newMonitor.Name, monName)
-	th.AssertEquals(t, newMonitor.Delay, newDelay)
+        monName := ""
+        newDelay := tools.RandomInt(20, 30)
+        updateMonitorOpts := monitors.UpdateOpts{
+                Name:  &monName,
+                Delay: newDelay,
+        }
+        _, err = monitors.Update(client, monitor.ID, updateMonitorOpts).Extract()
+        th.AssertNoErr(t, err)
+
+        if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+                t.Fatalf("Timed out waiting for loadbalancer to become active")
+        }
+
+        newMonitor, err := monitors.Get(client, monitor.ID).Extract()
+        th.AssertNoErr(t, err)
+
+        tools.PrintResource(t, newMonitor)
+
+        th.AssertEquals(t, newMonitor.Name, monName)
+        th.AssertEquals(t, newMonitor.Delay, newDelay)
 }
